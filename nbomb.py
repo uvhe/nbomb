@@ -1,16 +1,58 @@
 import requests
 import time
 import os
+import re
 
 def _exit():
     time.sleep(5)
     exit()
 
+def is_valid_url(url):
+    regex = r"^(http|https)://[a-zA-Z0-9.-]+.[a-zA-Z]{2,6}(/.*)?$"
+    return re.match(regex, url)
+
 def check_hook(hook):
-    info = requests.get(hook).text
-    if "\"message\": \"Unknown Webhook\"" in info:
-        return False
+    try:
+        if is_valid_url(hook):
+            info = requests.get(hook).text
+            if "\"message\": \"Unknown Webhook\"" in info:
+                return False
+        else:
+            return False
+    except requests.exceptions.MissingSchema:
+        pass
+    except requests.exceptions.InvalidSchema:
+        pass
     return True
+
+def get_webhooks_from_file(file_path):
+    valid_webhooks = []
+    invalid_webhooks = []
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                webhook = line.strip()
+                if check_hook(webhook):
+                    valid_webhooks.append(webhook)
+                else:
+                    invalid_webhooks.append(webhook)
+    except FileNotFoundError:
+        print(f"File not found at path: {file_path}")
+
+    return valid_webhooks, invalid_webhooks
+
+def get_webhooks():
+    webhooks = []
+    num_webhooks = int(input("How many webhooks do you want to use? > "))
+    for i in range(num_webhooks):
+        while True:
+            webhook = input(f"Enter webhook {i + 1} > ").strip()
+            if check_hook(webhook):
+                webhooks.append(webhook)
+                break
+            else:
+                print("Invalid webhook. Please enter a valid webhook URL.")
+    return webhooks
 
 def main(webhooks, delay, amount, message, hookDeleter):
     counter = 0
@@ -35,6 +77,7 @@ def main(webhooks, delay, amount, message, hookDeleter):
             time.sleep(1)  # Sleep for 1 second in case of errors
         time.sleep(float(delay))
         counter += 1
+
     if hookDeleter.lower() == "y":
         for webhook in webhooks:
             requests.delete(webhook)
@@ -54,33 +97,51 @@ $$ |  $$ |$$$$$$$  |\$$$$$$  |$$ | $$ | $$ |$$$$$$$  |
                                https://e-z.bio/vx
           """)
 
-    send_to_multiple_webhooks = input("Send the message to multiple webhooks? (Y/N) > ").strip().lower()
-    
-    if send_to_multiple_webhooks != "y":
-        webhook = input("Enter your webhook > ").strip()
-        webhooks = [webhook]
+    while True:
+        send_to_multiple_webhooks = input("Send the message to multiple webhooks? (Y/N) > ").strip().lower()
+        if send_to_multiple_webhooks in ['y', 'n']:
+            break
+        else:
+            print("Invalid input. Please enter 'Y' or 'N'.")
+
+    webhooks = []
+    if send_to_multiple_webhooks == "y":
+        file_path = input("Enter the path to the .txt file containing webhooks > ").strip()
+        valid_webhooks, invalid_webhooks = get_webhooks_from_file(file_path)
+
+        print(f"Found {len(valid_webhooks)} valid webhooks.")
+        print(f"Found {len(invalid_webhooks)} invalid webhooks.")
+
+        webhooks = valid_webhooks
     else:
-        num_webhooks = int(input("How many webhooks do you want to use? > "))
-        webhooks = []
-        for i in range(num_webhooks):
-            webhook = input(f"Enter webhook {i + 1} > ").strip()
-            webhooks.append(webhook)
+        webhooks = get_webhooks()
 
     message = input("Enter a message > ").strip()
-    delay = input("Enter a delay [int/float] > ").strip()
-    amount = input("Enter an amount [int/inf] > ").strip()
-    hookDeleter = input("Delete webhook(s) after spam? (Y/N) > ").strip()
-    
-    try:
-        delay = float(delay)
-    except ValueError:
-        _exit()
 
-    if not all(check_hook(webhook) for webhook in webhooks) or (not amount.isdigit() and amount != "inf") or (hookDeleter.lower() != "y" and hookDeleter.lower() != "n"):
-        _exit()
-    else:
-        main(webhooks, delay, amount, message, hookDeleter)
-        _exit()
+    while True:
+        delay = input("Enter a delay [int/float] > ").strip()
+        if delay.replace('.', '', 1).isdigit():
+            delay = float(delay)
+            break
+        else:
+            print("Invalid input. Please enter a valid delay.")
+
+    while True:
+        amount = input("Enter an amount [int/inf] > ").strip()
+        if amount.isdigit() or amount.lower() == "inf":
+            break
+        else:
+            print("Invalid input. Please enter a valid amount.")
+
+    while True:
+        hookDeleter = input("Delete webhook(s) after spam? (Y/N) > ").strip().lower()
+        if hookDeleter in ['y', 'n']:
+            break
+        else:
+            print("Invalid input. Please enter 'Y' or 'N'.")
+
+    main(webhooks, delay, amount, message, hookDeleter)
+    _exit()
 
 if __name__ == '__main__':
     os.system('cls')
